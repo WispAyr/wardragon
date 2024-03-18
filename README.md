@@ -17,7 +17,7 @@ Ensure you have a recent version of Node.js installed before proceeding.
 
 1. **Clone the repository:**
    ```bash
-   git clone [repository URL]
+   git clone https://github.com/WispAyr/wardragon/
    ```
 
 2. **Install dependencies:**
