@@ -14,6 +14,9 @@ const io = new Server(server);
 app.use(express.static('public')); // Serve static files
 app.use(express.json()); // For parsing application/json
 
+app.use(express.static('views'));
+
+
 // Load configurations
 const configPath = path.join(__dirname, 'config.json');
 let config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
