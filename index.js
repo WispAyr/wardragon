@@ -11,10 +11,24 @@ const diskInfo = require('node-disk-info');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
 app.use(express.static('public')); // Serve static files
 app.use(express.json()); // For parsing application/json
 
 app.use(express.static('views'));
+
+
+const SerialPort = require('serialport');
+const Readline = require('@serialport/parser-readline');
+const io = require('socket.io')(server); // Assuming you've already set up a server
+
+const port = new SerialPort('/dev/ttyACM0', { baudRate: 9600 }); // Adjust the port and baudRate as necessary
+const parser = port.pipe(new Readline({ delimiter: '\r\n' }));
+
+parser.on('data', (data) => {
+  console.log(data); // Log GPS data to the server console
+  io.emit('gps-data', data); // Emit the GPS data to the client
+});
 
 
 // Load configurations
