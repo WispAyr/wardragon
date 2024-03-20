@@ -7,14 +7,15 @@ const mqtt = require('mqtt');
 const os = require('os');
 const osUtils = require('os-utils');
 const diskInfo = require('node-disk-info');
+const screenshot = require('screenshot-desktop');
+const sharp = require('sharp');
 const app = express();
 const server = http.createServer(app);
 
 app.use(express.static('public')); // Serve static files
 app.use(express.json()); // For parsing application/json
-
 app.use(express.static('views'));
-const io = require('socket.io')(server); // Assuming you've already set up a server
+const io = new Server(server);
 
 // Load configurations
 const configPath = path.join(__dirname, 'config.json');
@@ -23,9 +24,29 @@ let config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 // MQTT setup
 const client = mqtt.connect(config.mqttServer);
 
-// Utility function to get system metrics
+// Utility function to get system metrics, including a screenshot
 async function getSystemMetrics() {
-    // Implementation of your getSystemMetrics function
+    // Implement metrics collection, here's a placeholder
+    let metrics = {
+        cpuUsage: await new Promise(resolve => osUtils.cpuUsage(resolve)),
+        freeMemory: osUtils.freememPercentage(),
+        totalMemory: osUtils.totalmem(),
+        freeDiskSpace: diskInfo.getDiskInfoSync().reduce((acc, { available }) => acc + available, 0),
+    };
+
+    // Capture a screenshot
+    try {
+        const screenshotBuffer = await screenshot({ format: 'jpg' });
+        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
+            .resize(800) // Resize to width of 800px, keeping aspect ratio
+            .toBuffer();
+        metrics.screenshot = resizedScreenshotBuffer.toString('base64');
+    } catch (error) {
+        console.error('Error capturing screenshot:', error);
+        metrics.screenshot = 'Unavailable';
+    }
+
+    return metrics;
 }
 
 // MQTT Client Events and Heartbeat
