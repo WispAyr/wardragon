@@ -8,6 +8,10 @@ const os = require('os');
 const osUtils = require('os-utils');
 const diskInfo = require('node-disk-info');
 
+// Load configurations
+const configPath = path.join(__dirname, 'config.json');
+const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
 // Function to get the system's UUID
 function getSystemUUID() {
     try {
@@ -35,8 +39,8 @@ async function getSystemMetrics() {
 }
 
 const uniqueID = getSystemUUID();
-const client = mqtt.connect('mqtt://192.168.10.254');
-const port = 3000;
+const client = mqtt.connect(config.mqttServer);
+const port = config.serverPort;
 
 // Serve static files
 app.use('/css', express.static('public/css'));
@@ -55,7 +59,7 @@ client.on('connect', async function () {
         };
         client.publish('wardragon/heartbeat', JSON.stringify(message));
         console.log('Heartbeat message sent:', message);
-    }, 1000); // 1000 milliseconds interval
+    }, config.heartbeatInterval); // Use interval from config
 });
 
 client.on('error', function (error) {
@@ -78,8 +82,7 @@ app.get('/', async (req, res) => {
     </script>
 `;
 
-let dashboard = data.replace('</body>', `${updateScript}</body>`); // Insert the update script just before the closing body tag
-
+        let dashboard = data.replace('</body>', `${updateScript}</body>`); // Insert the update script just before the closing body tag
 
         res.send(dashboard);
     });
@@ -89,4 +92,4 @@ app.listen(port, () => {
     console.log(`Dashboard running at http://localhost:${port}`);
 });
 
-// Make sure to have mqtt, express, fs, path, child_process, os, os-utils, node-disk-info packages installed.
+// Note: Ensure that mqtt, express, fs, path, child_process, os, os-utils, and node-disk-info packages are installed.

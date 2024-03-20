@@ -1,0 +1,5 @@
+{
+  "mqttServer": "mqtt://172.22.137.90",
+  "heartbeatInterval": 1000,
+  "serverPort": 3000
+}
