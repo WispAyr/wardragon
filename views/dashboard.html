@@ -5,71 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wardragon Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
     <link href="/css/custom.css" rel="stylesheet">
-    <script>
-        // Function to format JSON data for pretty display
-        function formatJSON(json) {
-            return JSON.stringify(json, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+    <style>
+        .mqtt-light-container {
+            text-align: center;
+            margin-top: 20px;
         }
-    </script>
+        .light {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: #ccc;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .light-on {
+            background-color: #4CAF50; /* Green */
+            box-shadow: 0 0 8px #4CAF50;
+        }
+    </style>
 </head>
 <body>
     <div class="container py-5">
         <h1 class="text-center mb-4">Wardragon Dashboard</h1>
-        <div class="row">
-            <div class="col-12 mb-4">
-                <div class="card glass">
-                    <div class="card-body">
-                        <h5 class="card-title d-flex justify-content-between align-items-center">
-                            Network Interfaces
-                            <button class="btn" type="button" data-bs-toggle="collapse" data-bs-target="#networkInterfacesCollapse" aria-expanded="true" aria-controls="networkInterfacesCollapse">
-                                <i class="fas fa-chevron-down"></i>
-                            </button>
-                        </h5>
-                        <div class="collapse show" id="networkInterfacesCollapse">
-                            <pre><code id="networkInterfaces">Loading...</code></pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 mb-4">
-                <div class="card glass">
-                    <div class="card-body">
-                        <h5 class="card-title">Memory</h5>
-                        <pre><code id="memory">Loading...</code></pre>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 mb-4">
-                <div class="card glass">
-                    <div class="card-body">
-                        <h5 class="card-title">CPU Usage</h5>
-                        <pre><code id="cpuUsage">Loading...</code></pre>
-                    </div>
-                </div>
-            </div>
-            <!-- Additional cards for other metrics can be added here -->
+        <div class="mqtt-light-container">
+            <div id="mqttLight" class="light"></div>
+            <p>MQTT Message Indicator</p>
         </div>
+        <!-- Original dashboard elements go here -->
+        <!-- Make sure to integrate any dynamic data loading or other functionalities as needed -->
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script>
-        async function fetchMetrics() {
-            try {
-                const response = await fetch('/api/metrics');
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                const metrics = await response.json();
-                // Assuming `metrics` is an object with keys corresponding to card IDs
-                Object.entries(metrics).forEach(([cardId, data]) => {
-                    updateCard(cardId, data);
-                });
-            } catch (error) {
-                console.error("Failed to fetch metrics:", error);
-            }
+        var socket = io();
+
+        socket.on('mqtt-sent', function() {
+            const light = document.getElementById('mqttLight');
+            light.classList.add('light-on');
+
+            setTimeout(() => {
+                light.classList.remove('light-on');
+            }, 1000); // Light turns off after 1 second
+        });
+
+        // Function to format JSON data for pretty display
+        function formatJSON(json) {
+            return JSON.stringify(json, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
         }
 
+        // Example function to update the content of a card
         function updateCard(cardId, data) {
             const element = document.getElementById(cardId);
             if (element) {
@@ -79,11 +63,9 @@
             }
         }
 
-        // Refresh the dashboard every 30 seconds
-        setInterval(fetchMetrics, 30000);
-
-        // Initially fetch metrics when the page loads
-        fetchMetrics();
+        // Dynamic data loading and other functionalities as required
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+

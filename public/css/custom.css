@@ -4,3 +4,21 @@
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.3);
 }
+.mqtt-light-container {
+    text-align: center;
+    margin-top: 20px;
+}
+.light {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    margin-bottom: 8px;
+}
+.light-off {
+    background-color: #ccc;
+}
+.light-on {
+    background-color: #4CAF50; /* Green */
+    box-shadow: 0 0 15px #4CAF50;
+}

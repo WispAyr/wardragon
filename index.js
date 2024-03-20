@@ -1,28 +1,53 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require("socket.io");
+const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 const os = require('os');
 const osUtils = require('os-utils');
 const diskInfo = require('node-disk-info');
-const mqtt = require('mqtt');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
 // Load configurations
 const configPath = path.join(__dirname, 'config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-// Function to get the system's UUID
-function getSystemUUID() {
-    try {
-        const uuid = execSync('cat /sys/class/dmi/id/product_uuid').toString().trim();
-        return uuid;
-    } catch (error) {
-        console.error('Error obtaining system UUID:', error);
-        return 'random-' + Math.random().toString(36).substring(2, 15);
-    }
-}
+// MQTT setup
+const client = mqtt.connect(config.mqttServer);
+const uniqueID = 'server-unique-id'; // Consider a dynamic way to generate/fetch this
 
-// Function to gather system metrics
+// Serve static files
+app.use('/css', express.static('public/css'));
+
+// MQTT Client Events and Heartbeat
+client.on('connect', () => {
+    console.log(`MQTT client connected with Unique ID: ${uniqueID}`);
+    setInterval(async () => {
+        const metrics = await getSystemMetrics();
+        const message = {
+            unitID: uniqueID,
+            timestamp: Date.now(),
+            status: 'alive',
+            metrics: metrics
+        };
+        client.publish('wardragon/heartbeat', JSON.stringify(message), {}, (error) => {
+            if (!error) {
+                io.emit('mqtt-sent'); // Notify connected clients for the UI indicator
+                console.log('Heartbeat message sent:', message);
+            }
+        });
+    }, config.heartbeatInterval);
+});
+
+client.on('error', function (error) {
+    console.error('MQTT Client Error:', error);
+});
+
+// System Metrics Function
 async function getSystemMetrics() {
     const metrics = {
         networkInterfaces: os.networkInterfaces(),
@@ -36,48 +61,9 @@ async function getSystemMetrics() {
     return metrics;
 }
 
-const uniqueID = getSystemUUID();
-const client = mqtt.connect(config.mqttServer);
-const app = express();
-const port = config.serverPort;
-
-// Serve static files
-app.use('/css', express.static('public/css'));
-
-// MQTT Client Events
-client.on('connect', async function () {
-    console.log(`Connected with Unique ID: ${uniqueID}`);
-    setInterval(async () => {
-        const metrics = await getSystemMetrics();
-        const message = {
-            unitID: uniqueID,
-            timestamp: Date.now(),
-            status: 'alive',
-            metrics: metrics
-        };
-        client.publish('wardragon/heartbeat', JSON.stringify(message));
-        console.log('Heartbeat message sent:', message);
-    }, config.heartbeatInterval);
-});
-
-client.on('error', function (error) {
-    console.log('MQTT Client Error:', error);
-});
-
-// Endpoint for fetching metrics as JSON
-app.get('/api/metrics', async (req, res) => {
-    try {
-        const metrics = await getSystemMetrics();
-        res.json(metrics);
-    } catch (error) {
-        console.error("Failed to get metrics:", error);
-        res.status(500).send("Failed to get metrics");
-    }
-});
-
-// Endpoint for the dashboard
-app.get('/', async (req, res) => {
-    fs.readFile(path.join(__dirname, 'views/dashboard.html'), 'utf8', (err, data) => {
+// Dashboard Endpoint
+app.get('/', (req, res) => {
+    fs.readFile(path.join(__dirname, 'views', 'dashboard.html'), 'utf8', (err, data) => {
         if (err) {
             console.error('Error reading dashboard template:', err);
             return res.status(500).send('Server error');
@@ -86,6 +72,15 @@ app.get('/', async (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`Dashboard running at http://localhost:${port}`);
+// Socket.io Connection
+io.on('connection', (socket) => {
+    console.log('A client connected');
+    socket.on('disconnect', () => {
+        console.log('A client disconnected');
+    });
+});
+
+const port = config.serverPort || 3000;
+server.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
 });
