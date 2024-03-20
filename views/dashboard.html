@@ -48,7 +48,12 @@
     <script>
         // Example function to update the content of a card
         function updateCard(cardId, data) {
-            document.getElementById(cardId).innerHTML = formatJSON(data);
+            const element = document.getElementById(cardId);
+            if (element) {
+                element.innerHTML = formatJSON(data);
+            } else {
+                console.error("Element not found for ID:", cardId);
+            }
         }
 
         // This script will be dynamically populated by the server with actual data
