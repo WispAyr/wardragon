@@ -64,22 +64,25 @@ client.on('error', function (error) {
     console.log('MQTT Client Error:', error);
 });
 
+// Endpoint for fetching metrics as JSON
+app.get('/api/metrics', async (req, res) => {
+    try {
+        const metrics = await getSystemMetrics();
+        res.json(metrics);
+    } catch (error) {
+        console.error("Failed to get metrics:", error);
+        res.status(500).send("Failed to get metrics");
+    }
+});
+
 // Endpoint for the dashboard
 app.get('/', async (req, res) => {
-    const metrics = await getSystemMetrics();
     fs.readFile(path.join(__dirname, 'views/dashboard.html'), 'utf8', (err, data) => {
         if (err) {
             console.error('Error reading dashboard template:', err);
             return res.status(500).send('Server error');
         }
-        let updateScript = `
-<script>
-    ${Object.entries(metrics).map(([key, value]) => `updateCard('${key}', ${JSON.stringify(value)});`).join('\n')}
-</script>
-`;
-
-        let dashboard = data.replace('</body>', `${updateScript}</body>`);
-        res.send(dashboard);
+        res.send(data);
     });
 });
 

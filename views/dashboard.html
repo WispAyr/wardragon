@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wardragon Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
     <link href="/css/custom.css" rel="stylesheet">
     <script>
         // Function to format JSON data for pretty display
@@ -18,10 +19,17 @@
         <h1 class="text-center mb-4">Wardragon Dashboard</h1>
         <div class="row">
             <div class="col-12 mb-4">
-                <div class="card glass" id="networkInterfacesCard">
+                <div class="card glass">
                     <div class="card-body">
-                        <h5 class="card-title">Network Interfaces</h5>
-                        <pre><code id="networkInterfaces">Loading...</code></pre>
+                        <h5 class="card-title d-flex justify-content-between align-items-center">
+                            Network Interfaces
+                            <button class="btn" type="button" data-bs-toggle="collapse" data-bs-target="#networkInterfacesCollapse" aria-expanded="true" aria-controls="networkInterfacesCollapse">
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                        </h5>
+                        <div class="collapse show" id="networkInterfacesCollapse">
+                            <pre><code id="networkInterfaces">Loading...</code></pre>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -41,12 +49,27 @@
                     </div>
                 </div>
             </div>
-            <!-- Add more cards for other metrics as needed -->
+            <!-- Additional cards for other metrics can be added here -->
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Example function to update the content of a card
+        async function fetchMetrics() {
+            try {
+                const response = await fetch('/api/metrics');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const metrics = await response.json();
+                // Assuming `metrics` is an object with keys corresponding to card IDs
+                Object.entries(metrics).forEach(([cardId, data]) => {
+                    updateCard(cardId, data);
+                });
+            } catch (error) {
+                console.error("Failed to fetch metrics:", error);
+            }
+        }
+
         function updateCard(cardId, data) {
             const element = document.getElementById(cardId);
             if (element) {
@@ -56,9 +79,11 @@
             }
         }
 
+        // Refresh the dashboard every 30 seconds
+        setInterval(fetchMetrics, 30000);
 
-        // This script will be dynamically populated by the server with actual data
-        // Example: updateCard('networkInterfaces', { ...network interfaces data... });
+        // Initially fetch metrics when the page loads
+        fetchMetrics();
     </script>
 </body>
 </html>
