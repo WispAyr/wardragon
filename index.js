@@ -197,8 +197,9 @@ async function sendHeartbeat() {
         process.on('unhandledRejection', (reason, promise) => {
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);
         });
-        
+    
         const port = process.env.PORT || 4000;
         server.listen(port, () => {
-        console.log(Server running at http://localhost:${port});
+            console.log(`Server running at http://localhost:${port}`);
+
         });
