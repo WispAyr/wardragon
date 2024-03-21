@@ -16,7 +16,7 @@ let config;
 try {
     const configPath = path.join(__dirname, 'config.json');
     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    console.log('Configuration loaded:', config); // Display loaded configuration values
+    console.log('Configuration loaded:', config);
 } catch (error) {
     console.error('Failed to load configuration:', error);
     process.exit(1);
@@ -32,13 +32,46 @@ mqttClient.on('error', (error) => {
     console.error('MQTT connection error:', error);
 });
 
+let gpsData = null;
+let gpsdConnected = false;
+
 const gpsdClient = new net.Socket();
 const gpsdHost = 'localhost';
 const gpsdPort = 2947;
 
 gpsdClient.connect(gpsdPort, gpsdHost, () => {
     console.log('Connected to gpsd');
+    gpsdConnected = true;
     gpsdClient.write('?WATCH={"enable":true,"json":true};');
+});
+
+gpsdClient.on('data', async (data) => {
+    const dataStr = data.toString();
+    const messages = dataStr.split('\n');
+
+    for (const message of messages) {
+        if (message) {
+            try {
+                gpsData = JSON.parse(message);
+            } catch (error) {
+                console.error('Error parsing JSON from gpsd:', error);
+            }
+        }
+    }
+});
+
+gpsdClient.on('close', () => {
+    console.log('Connection to gpsd closed');
+    gpsdConnected = false;
+});
+
+gpsdClient.on('error', (error) => {
+    console.error('GPSD connection error:', error);
+    gpsdConnected = false;
+});
+
+mqttClient.on('close', () => {
+    console.log('MQTT connection closed');
 });
 
 async function getSystemMetrics() {
@@ -69,63 +102,47 @@ async function getSystemMetrics() {
     };
 }
 
-gpsdClient.on('data', async (data) => {
-    const dataStr = data.toString();
-    const messages = dataStr.split('\n');
+async function captureScreenshot() {
+    if (!config.captureScreenshots) return '';
 
-    for (const message of messages) {
-        if (message) {
-            try {
-                const gpsData = JSON.parse(message);
-
-                if (gpsData.class === 'TPV') {
-                    const systemMetrics = await getSystemMetrics();
-                    let screenshotBase64 = '';
-                    try {
-                        const screenshotBuffer = await screenshot({ format: 'jpg' });
-                        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
-                            .resize(800)
-                            .toBuffer();
-                        screenshotBase64 = resizedScreenshotBuffer.toString('base64');
-                    } catch (error) {
-                        console.error('Error capturing or processing screenshot:', error);
-                    }
-
-                    const messagePayload = {
-                        gpsData: {
-                            latitude: gpsData.lat,
-                            longitude: gpsData.lon,
-                            altitude: gpsData.alt,
-                            speed: gpsData.speed
-                        },
-                        screenshot: screenshotBase64,
-                        systemMetrics
-                    };
-
-                    mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
-                        if (error) {
-                            console.error('Error sending data via MQTT:', error);
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error('Error parsing JSON from gpsd:', error);
-            }
-        }
+    try {
+        const screenshotBuffer = await screenshot({ format: 'jpg' });
+        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
+            .resize(800)
+            .toBuffer();
+        return resizedScreenshotBuffer.toString('base64');
+    } catch (error) {
+        console.error('Error capturing or processing screenshot:', error);
+        return '';
     }
-});
+}
 
-gpsdClient.on('close', () => {
-    console.log('Connection to gpsd closed');
-});
+async function getOptionalSystemMetrics() {
+    if (!config.transferSystemMetrics) return {};
 
-gpsdClient.on('error', (error) => {
-    console.error('GPSD connection error:', error);
-});
+    return await getSystemMetrics();
+}
 
-mqttClient.on('close', () => {
-    console.log('MQTT connection closed');
-});
+async function sendHeartbeat() {
+    const screenshotBase64 = await captureScreenshot();
+    const systemMetrics = await getOptionalSystemMetrics();
+
+    const messagePayload = {
+        gpsData: gpsData,
+        gpsdConnected: gpsdConnected,
+        screenshot: screenshotBase64,
+        systemMetrics
+    };
+
+    mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
+        if (error) {
+            console.error('Error sending data via MQTT:', error);
+        }
+    });
+}
+
+const heartbeatInterval = config.heartbeatInterval || 300000; // Default to 5 minutes if not specified
+setInterval(sendHeartbeat, heartbeatInterval);
 
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);

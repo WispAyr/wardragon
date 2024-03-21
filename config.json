@@ -3,5 +3,7 @@
   "heartbeatInterval": 1000,
   "serverPort": 4000,
   "uniqueID": "123456789",
-  "mqttTopic": "wardragon/heartbeat"
+  "mqttTopic": "wardragon/heartbeat",
+  "captureScreenshots": true,
+  "transferSystemMetrics": true
 }
