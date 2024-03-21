@@ -1,110 +1,146 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require("socket.io");
 const fs = require('fs');
 const path = require('path');
 const mqtt = require('mqtt');
-const os = require('os');
-const osUtils = require('os-utils');
-const diskInfo = require('node-disk-info');
+const net = require('net');
 const screenshot = require('screenshot-desktop');
 const sharp = require('sharp');
+const os = require('os');
+const { getDiskInfoSync } = require('node-disk-info');
+
 const app = express();
 const server = http.createServer(app);
 
-app.use(express.static('public')); // Serve static files
-app.use(express.json()); // For parsing application/json
-app.use(express.static('views'));
-const io = new Server(server);
-
-// Load configurations
-const configPath = path.join(__dirname, 'config.json');
-let config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-// MQTT setup
-const client = mqtt.connect(config.mqttServer);
-
-// Utility function to get system metrics, including a screenshot
-async function getSystemMetrics() {
-    // Implement metrics collection, here's a placeholder
-    let metrics = {
-        cpuUsage: await new Promise(resolve => osUtils.cpuUsage(resolve)),
-        freeMemory: osUtils.freememPercentage(),
-        totalMemory: osUtils.totalmem(),
-        freeDiskSpace: diskInfo.getDiskInfoSync().reduce((acc, { available }) => acc + available, 0),
-    };
-
-    // Capture a screenshot
-    try {
-        const screenshotBuffer = await screenshot({ format: 'jpg' });
-        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
-            .resize(800) // Resize to width of 800px, keeping aspect ratio
-            .toBuffer();
-        metrics.screenshot = resizedScreenshotBuffer.toString('base64');
-    } catch (error) {
-        console.error('Error capturing screenshot:', error);
-        metrics.screenshot = 'Unavailable';
-    }
-
-    return metrics;
+// Attempt to load configurations
+let config;
+try {
+    const configPath = path.join(__dirname, 'config.json');
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+} catch (error) {
+    console.error('Failed to load configuration:', error);
+    process.exit(1); // Exit if configuration cannot be loaded
 }
 
-// MQTT Client Events and Heartbeat
-client.on('connect', () => {
-    console.log(`MQTT client connected with Unique ID: ${config.uniqueID}`);
-    setInterval(async () => {
-        const metrics = await getSystemMetrics();
-        const message = {
-            unitID: config.uniqueID,
-            timestamp: Date.now(),
-            status: 'alive',
-            metrics: metrics
-        };
-        client.publish(config.mqttTopic, JSON.stringify(message), {}, (error) => {
-            if (!error) {
-                io.emit('mqtt-sent'); // Notify connected clients
-                console.log('Heartbeat message sent:', message);
+// MQTT client setup
+const mqttClient = mqtt.connect(config.mqttServer);
+
+mqttClient.on('connect', () => {
+    console.log('Connected to MQTT server');
+});
+
+mqttClient.on('error', (error) => {
+    console.error('MQTT connection error:', error);
+});
+
+// GPSD client setup
+const gpsdClient = new net.Socket();
+const gpsdHost = 'localhost';
+const gpsdPort = 2947;
+
+gpsdClient.connect(gpsdPort, gpsdHost, () => {
+    console.log('Connected to gpsd');
+    gpsdClient.write('?WATCH={"enable":true,"json":true};');
+});
+
+// Function to get system metrics
+async function getSystemMetrics() {
+    const totalMemory = os.totalmem();
+    const freeMemory = os.freemem();
+    const cpuModel = os.cpus()[0].model;
+    const cpuSpeed = os.cpus()[0].speed;
+    let disks = [];
+    try {
+        disks = getDiskInfoSync().map(disk => ({
+            filesystem: disk.filesystem,
+            size: disk.blocks,
+            available: disk.available,
+            mountpoint: disk.mounted
+        }));
+    } catch (error) {
+        console.error('Error fetching disk info:', error);
+    }
+    const networks = os.networkInterfaces();
+
+    return {
+        totalMemory,
+        freeMemory,
+        cpuModel,
+        cpuSpeed,
+        disks,
+        networks
+    };
+}
+
+// Handling GPSD data
+gpsdClient.on('data', async (data) => {
+    const dataStr = data.toString();
+    const messages = dataStr.split('\n');
+
+    for (const message of messages) {
+        if (message) {
+            try {
+                const gpsData = JSON.parse(message);
+
+                if (gpsData.class === 'TPV') {
+                    const systemMetrics = await getSystemMetrics();
+                    let screenshotBase64 = '';
+                    try {
+                        const screenshotBuffer = await screenshot({ format: 'jpg' });
+                        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
+                            .resize(800)
+                            .toBuffer();
+                        screenshotBase64 = resizedScreenshotBuffer.toString('base64');
+                    } catch (error) {
+                        console.error('Error capturing or processing screenshot:', error);
+                    }
+
+                    const messagePayload = {
+                        gpsData: {
+                            latitude: gpsData.lat,
+                            longitude: gpsData.lon,
+                            altitude: gpsData.alt,
+                            speed: gpsData.speed
+                        },
+                        screenshot: screenshotBase64,
+                        systemMetrics
+                    };
+
+                    mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
+                        if (error) {
+                            console.error('Error sending data via MQTT:', error);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error parsing JSON from gpsd:', error);
             }
-        });
-    }, config.heartbeatInterval);
-});
-
-// Serve the main dashboard page
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
-});
-
-// Serve the configuration editing page
-app.get('/edit-config', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'edit-config.html'));
-});
-
-// API endpoint to fetch current configuration
-app.get('/config', (req, res) => {
-    res.sendFile(configPath);
-});
-
-// API endpoint to update configuration
-app.post('/config', (req, res) => {
-    config = req.body; // Update the in-memory config
-    fs.writeFile(configPath, JSON.stringify(config, null, 2), (err) => {
-        if (err) {
-            console.error('Error writing config file:', err);
-            return res.status(500).send('Error saving configuration');
         }
-        res.send({ status: 'success' });
-    });
+    }
 });
 
-// Socket.io setup for real-time communication
-io.on('connection', (socket) => {
-    console.log('A client connected');
-    socket.on('disconnect', () => {
-        console.log('Client disconnected');
-    });
+gpsdClient.on('close', () => {
+    console.log('Connection to gpsd closed');
 });
 
-const port = process.env.PORT || 4000;
+gpsdClient.on('error', (error) => {
+    console.error('GPSD connection error:', error);
+});
+
+mqttClient.on('close', () => {
+    console.log('MQTT connection closed');
+});
+
+// Handle uncaught exceptions and unhandled promise rejections
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+const port = process.env.PORT || 3000;
 server.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
 });

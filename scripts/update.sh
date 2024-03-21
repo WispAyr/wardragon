@@ -14,6 +14,7 @@ echo "Repository reset and cleaned."
 # Step 2: Installing Node.js dependencies
 echo "Installing Node.js dependencies..."
 npm install express http socket.io fs path mqtt os os-utils node-disk-info screenshot-desktop sharp
+npm install express mqtt screenshot-desktop sharp node-disk-info
 npm install
 echo "Dependencies installed."
 
