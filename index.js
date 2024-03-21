@@ -8,6 +8,7 @@ const screenshot = require('screenshot-desktop');
 const sharp = require('sharp');
 const os = require('os');
 const { getDiskInfoSync } = require('node-disk-info');
+const actions = require('./actions'); // Import actions defined in actions.js
 
 const app = express();
 const server = http.createServer(app);
@@ -26,10 +27,25 @@ const mqttClient = mqtt.connect(config.mqttServer);
 
 mqttClient.on('connect', () => {
     console.log('Connected to MQTT server');
+    // Subscribe to the ACTION topic to listen for incoming action messages
+    mqttClient.subscribe('ACTION', function(err) {
+        if (!err) {
+            console.log('Subscribed to ACTION topic');
+        } else {
+            console.error('Failed to subscribe to ACTION topic:', err);
+        }
+    });
 });
 
 mqttClient.on('error', (error) => {
     console.error('MQTT connection error:', error);
+});
+
+// Handle incoming MQTT messages for actions
+mqttClient.on('message', function(topic, message) {
+    if (topic === 'ACTION') {
+        handleActionMessage(message.toString());
+    }
 });
 
 let gpsData = null;
@@ -68,10 +84,6 @@ gpsdClient.on('close', () => {
 gpsdClient.on('error', (error) => {
     console.error('GPSD connection error:', error);
     gpsdConnected = false;
-});
-
-mqttClient.on('close', () => {
-    console.log('MQTT connection closed');
 });
 
 async function getSystemMetrics() {
@@ -137,22 +149,56 @@ async function sendHeartbeat() {
     mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
         if (error) {
             console.error('Error sending data via MQTT:', error);
+            }
+            });
+            }
+            
+            // Set the heartbeat interval based on config
+            const heartbeatInterval = config.heartbeatInterval || 300000; // Default to 5 minutes if not specified
+            setInterval(sendHeartbeat, heartbeatInterval);
+            
+            function handleActionMessage(message) {
+            let actionMessage;
+            try {
+            actionMessage = JSON.parse(message);
+            } catch (error) {
+            console.error('Error parsing ACTION message:', error);
+            return;
+            }
+            
+            
+            const { action, taskId } = actionMessage;
+            if (actions[action]) {
+                actions[action](taskId, (error, result) => {
+                    const responseTopic = `ACTION_RESPONSE/${taskId}`;
+                    if (error) {
+                        mqttClient.publish(responseTopic, JSON.stringify({ error: error.message, taskId }), {}, (err) => {
+                            if (err) {
+                                console.error('Error sending action failure response:', err);
+                            }
+                        });
+                    } else {
+                        mqttClient.publish(responseTopic, JSON.stringify({ result, taskId }), {}, (err) => {
+                            if (err) {
+                                console.error('Error sending action success response:', err);
+                            }
+                        });
+                    }
+                });
+            } else {
+                console.error(`Received unknown action: ${action}`);
+            }
         }
-    });
-}
 
-const heartbeatInterval = config.heartbeatInterval || 300000; // Default to 5 minutes if not specified
-setInterval(sendHeartbeat, heartbeatInterval);
-
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-const port = process.env.PORT || 4000;
-server.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-});
+        process.on('uncaughtException', (error) => {
+        console.error('Uncaught Exception:', error);
+        });
+        
+        process.on('unhandledRejection', (reason, promise) => {
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        });
+        
+        const port = process.env.PORT || 4000;
+        server.listen(port, () => {
+        console.log(Server running at http://localhost:${port});
+        });
