@@ -23,7 +23,10 @@ try {
     process.exit(1);
 }
 
-const mqttClient = mqtt.connect(config.mqttServer);
+const mqttClient = mqtt.connect(config.mqttServer, {
+    clientId: config.uniqueID
+});
+
 
 mqttClient.on('connect', () => {
     console.log('Connected to MQTT server');
