@@ -94,6 +94,7 @@ async function getSystemMetrics() {
     const freeMemory = os.freemem();
     const cpuModel = os.cpus()[0].model;
     const cpuSpeed = os.cpus()[0].speed;
+    const unitID = config.uniqueID;
     let disks = [];
     try {
         disks = getDiskInfoSync().map(disk => ({
@@ -108,6 +109,7 @@ async function getSystemMetrics() {
     const networks = os.networkInterfaces();
 
     return {
+        unitID,
         totalMemory,
         freeMemory,
         cpuModel,
@@ -141,8 +143,10 @@ async function getOptionalSystemMetrics() {
 async function sendHeartbeat() {
     const screenshotBase64 = await captureScreenshot();
     const systemMetrics = await getOptionalSystemMetrics();
+    const unitID = config.uniqueID;
 
     const messagePayload = {
+        unitID: unitID,
         gpsData: gpsData,
         gpsdConnected: gpsdConnected,
         screenshot: screenshotBase64,
