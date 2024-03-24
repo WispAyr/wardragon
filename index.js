@@ -8,14 +8,15 @@ const screenshot = require('screenshot-desktop');
 const sharp = require('sharp');
 const os = require('os');
 const { getDiskInfoSync } = require('node-disk-info');
-const actions = require('./actions'); // Import actions defined in actions.js
+const actions = require('./actions');
 
 const app = express();
 const server = http.createServer(app);
+const configPath = path.join(__dirname, 'config.json');
 
 let config;
+
 try {
-    const configPath = path.join(__dirname, 'config.json');
     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     console.log('Configuration loaded:', config);
 } catch (error) {
@@ -29,40 +30,8 @@ const mqttClient = mqtt.connect(config.mqttServer, {
 
 const wifi = require('node-wifi');
 
-async function scanWifi() {
-    try {
-        const networks = await wifi.scan();
-        return networks;
-    } catch (error) {
-        console.error('Error scanning WiFi networks:', error);
-        return [];
-    }
-}
-
-
-
-mqttClient.on('connect', () => {
-    console.log('Connected to MQTT server');
-    // Subscribe to the ACTION topic to listen for incoming action messages
-    mqttClient.subscribe('ACTION', function(err) {
-        if (!err) {
-            console.log('Subscribed to ACTION topic');
-        } else {
-            console.error('Failed to subscribe to ACTION topic:', err);
-        }
-    });
-});
-
-mqttClient.on('error', (error) => {
-    console.error('MQTT connection error:', error);
-});
-
-// Handle incoming MQTT messages for actions
-mqttClient.on('message', function(topic, message) {
-    if (topic === 'ACTION') {
-        handleActionMessage(message.toString());
-    }
-});
+const wifiScanInterval = config.wifiScanInterval || 60000;
+setInterval(scanWifi, wifiScanInterval);
 
 let gpsData = null;
 let gpsdConnected = false;
@@ -78,8 +47,7 @@ gpsdClient.connect(gpsdPort, gpsdHost, () => {
 });
 
 gpsdClient.on('data', async (data) => {
-    const dataStr = data.toString();
-    const messages = dataStr.split('\n');
+    const messages = data.toString().split('\n');
 
     for (const message of messages) {
         if (message) {
@@ -101,6 +69,31 @@ gpsdClient.on('error', (error) => {
     console.error('GPSD connection error:', error);
     gpsdConnected = false;
 });
+
+async function scanWifi() {
+    try {
+        const networks = await wifi.scan();
+        return networks;
+    } catch (error) {
+        console.error('Error scanning WiFi networks:', error);
+        return [];
+    }
+}
+
+async function captureScreenshot() {
+    if (!config.captureScreenshots) return '';
+
+    try {
+        const screenshotBuffer = await screenshot({ format: 'jpg' });
+        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
+            .resize(800)
+            .toBuffer();
+        return resizedScreenshotBuffer.toString('base64');
+    } catch (error) {
+        console.error('Error capturing or processing screenshot:', error);
+        return '';
+    }
+}
 
 async function getSystemMetrics() {
     const totalMemory = os.totalmem();
@@ -132,24 +125,6 @@ async function getSystemMetrics() {
     };
 }
 
-const wifiScanInterval = config.wifiScanInterval || 60000; // Default to 1 minute if not specified
-setInterval(scanWifi, wifiScanInterval);
-
-async function captureScreenshot() {
-    if (!config.captureScreenshots) return '';
-
-    try {
-        const screenshotBuffer = await screenshot({ format: 'jpg' });
-        const resizedScreenshotBuffer = await sharp(screenshotBuffer)
-            .resize(800)
-            .toBuffer();
-        return resizedScreenshotBuffer.toString('base64');
-    } catch (error) {
-        console.error('Error capturing or processing screenshot:', error);
-        return '';
-    }
-}
-
 async function getOptionalSystemMetrics() {
     if (!config.transferSystemMetrics) return {};
 
@@ -179,61 +154,72 @@ async function sendHeartbeat() {
     });
 }
 
+mqttClient.on('connect', () => {
+    console.log('Connected to MQTT server');
+    mqttClient.subscribe('ACTION', function(err) {
+        if (!err) {
+            console.log('Subscribed to ACTION topic');
+        } else {
+            console.error('Failed to subscribe to ACTION topic:', err);
+        }
+    });
+});
 
-    mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
-        if (error) {
-            console.error('Error sending data via MQTT:', error);
-            }
-            });
-            }
-            
-            // Set the heartbeat interval based on config
-            const heartbeatInterval = config.heartbeatInterval || 300000; // Default to 5 minutes if not specified
-            setInterval(sendHeartbeat, heartbeatInterval);
-            
-            function handleActionMessage(message) {
-            let actionMessage;
-            try {
-            actionMessage = JSON.parse(message);
-            } catch (error) {
-            console.error('Error parsing ACTION message:', error);
-            return;
-            }
-            
-            
-            const { action, taskId } = actionMessage;
-            if (actions[action]) {
-                actions[action](taskId, (error, result) => {
-                    const responseTopic = `ACTION_RESPONSE/${taskId}`;
-                    if (error) {
-                        mqttClient.publish(responseTopic, JSON.stringify({ error: error.message, taskId }), {}, (err) => {
-                            if (err) {
-                                console.error('Error sending action failure response:', err);
-                            }
-                        });
-                    } else {
-                        mqttClient.publish(responseTopic, JSON.stringify({ result, taskId }), {}, (err) => {
-                            if (err) {
-                                console.error('Error sending action success response:', err);
-                            }
-                        });
+mqttClient.on('error', (error) => {
+    console.error('MQTT connection error:', error);
+});
+
+mqttClient.on('message', function(topic, message) {
+    if (topic === 'ACTION') {
+        handleActionMessage(message.toString());
+    }
+});
+
+const heartbeatInterval = config.heartbeatInterval || 300000;
+setInterval(sendHeartbeat, heartbeatInterval);
+
+function handleActionMessage(message) {
+    let actionMessage;
+    try {
+        actionMessage = JSON.parse(message);
+    } catch (error) {
+        console.error('Error parsing ACTION message:', error);
+        return;
+    }
+    
+    const { action, taskId } = actionMessage;
+    const responseTopic = `ACTION_RESPONSE/${taskId}`;
+
+    if (actions[action]) {
+        actions[action](taskId, (error, result) => {
+            if (error) {
+                mqttClient.publish(responseTopic, JSON.stringify({ error: error.message, taskId }), {}, (err) => {
+                    if (err) {
+                        console.error('Error sending action failure response:', err);
                     }
                 });
             } else {
-                console.error(`Received unknown action: ${action}`);
+                mqttClient.publish(responseTopic, JSON.stringify({ result, taskId }), {}, (err) => {
+                    if (err) {
+                        console.error('Error sending action success response:', err);
+                    }
+                });
             }
-        }
+        });
+    } else {
+        console.error(`Received unknown action: ${action}`);
+    }
+}
 
-        process.on('uncaughtException', (error) => {
-        console.error('Uncaught Exception:', error);
-        });
-        
-        process.on('unhandledRejection', (reason, promise) => {
-        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-        });
-    
-        const port = process.env.PORT || 4000;
-        server.listen(port, () => {
-            console.log(`Server running at http://localhost:${port}`);
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+});
 
-        });
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+const port = process.env.PORT || 4000;
+server.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});
