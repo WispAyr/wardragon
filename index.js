@@ -191,7 +191,6 @@ async function sendHeartbeat() {
     }
 
     const unitID = config.uniqueID;
-
     if (config.bluetoothScanEnabled) {
         bluetoothDevices = await scanBluetooth(); // Ensure Bluetooth scanning is properly managed
     }
