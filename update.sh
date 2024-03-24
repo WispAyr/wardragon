@@ -11,8 +11,7 @@ git clean -xffd
 git pull
 echo "Repository reset and cleaned."
 
-npm install node-wifi
-npm install @abandonware/noble
+
 
 
 
@@ -21,8 +20,10 @@ echo "Installing Node.js dependencies..."
 sudo npm install express http socket.io fs path mqtt os os-utils node-disk-info screenshot-desktop sharp
 sudo npm install express mqtt screenshot-desktop sharp node-disk-info
 sudo npm install --include=optional sharp
+sudo npm install node-wifi
+sudo npm install @abandonware/noble
 
-npm install
+sudo npm install
 echo "Dependencies installed."
 
 # Step 3: Installing system packages with apt-get (Requires sudo privileges)
