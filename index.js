@@ -30,6 +30,13 @@ const mqttClient = mqtt.connect(config.mqttServer, {
 
 const wifi = require('node-wifi');
 
+// Initialize wifi module
+// Absolutely necessary even to set interface to null
+wifi.init({
+    iface: null // network interface, choose a random wifi interface if set to null
+  });
+  
+
 const wifiScanInterval = config.wifiScanInterval || 60000;
 setInterval(scanWifi, wifiScanInterval);
 
