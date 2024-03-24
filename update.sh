@@ -15,6 +15,7 @@ npm install node-wifi
 npm install @abandonware/noble
 
 
+
 # Step 2: Installing Node.js dependencies
 echo "Installing Node.js dependencies..."
 sudo npm install express http socket.io fs path mqtt os os-utils node-disk-info screenshot-desktop sharp
