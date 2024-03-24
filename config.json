@@ -5,5 +5,7 @@
   "uniqueID": "123456789",
   "mqttTopic": "wardragon/heartbeat",
   "captureScreenshots": true,
-  "transferSystemMetrics": true
+  "transferSystemMetrics": true,
+  "wifiScanInterval": 60000, // Interval for WiFi scanning in milliseconds
+  "wifiScanEnabled": true // Whether WiFi scanning is enabled or not
 }

@@ -11,6 +11,8 @@ git clean -xffd
 git pull
 echo "Repository reset and cleaned."
 
+npm install node-wifi
+
 # Step 2: Installing Node.js dependencies
 echo "Installing Node.js dependencies..."
 npm install express http socket.io fs path mqtt os os-utils node-disk-info screenshot-desktop sharp

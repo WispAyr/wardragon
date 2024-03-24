@@ -27,6 +27,19 @@ const mqttClient = mqtt.connect(config.mqttServer, {
     clientId: config.uniqueID
 });
 
+const wifi = require('node-wifi');
+
+async function scanWifi() {
+    try {
+        const networks = await wifi.scan();
+        return networks;
+    } catch (error) {
+        console.error('Error scanning WiFi networks:', error);
+        return [];
+    }
+}
+
+
 
 mqttClient.on('connect', () => {
     console.log('Connected to MQTT server');
@@ -119,6 +132,9 @@ async function getSystemMetrics() {
     };
 }
 
+const wifiScanInterval = config.wifiScanInterval || 60000; // Default to 1 minute if not specified
+setInterval(scanWifi, wifiScanInterval);
+
 async function captureScreenshot() {
     if (!config.captureScreenshots) return '';
 
@@ -143,6 +159,8 @@ async function getOptionalSystemMetrics() {
 async function sendHeartbeat() {
     const screenshotBase64 = await captureScreenshot();
     const systemMetrics = await getOptionalSystemMetrics();
+    const wifiNetworks = config.wifiScanEnabled ? await scanWifi() : [];
+
     const unitID = config.uniqueID;
 
     const messagePayload = {
@@ -150,8 +168,17 @@ async function sendHeartbeat() {
         gpsData: gpsData,
         gpsdConnected: gpsdConnected,
         screenshot: screenshotBase64,
-        systemMetrics
+        systemMetrics,
+        wifiNetworks // Include WiFi scan results
     };
+
+    mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
+        if (error) {
+            console.error('Error sending data via MQTT:', error);
+        }
+    });
+}
+
 
     mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
         if (error) {
