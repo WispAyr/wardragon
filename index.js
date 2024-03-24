@@ -67,6 +67,45 @@ gpsdClient.on('data', async (data) => {
     }
 });
 
+const noble = require('@abandonware/noble');
+
+async function scanBluetooth() {
+    return new Promise((resolve, reject) => {
+        let devices = [];
+
+        noble.on('discover', (peripheral) => {
+            devices.push({
+                id: peripheral.id,
+                address: peripheral.address,
+                localName: peripheral.advertisement.localName,
+                txPowerLevel: peripheral.advertisement.txPowerLevel,
+                rssi: peripheral.rssi
+            });
+        });
+
+        noble.on('scanStart', () => {
+            console.log('Bluetooth scanning started');
+        });
+
+        noble.on('scanStop', () => {
+            console.log('Bluetooth scanning stopped');
+            resolve(devices);
+        });
+
+        noble.startScanning([], true, (error) => {
+            if (error) {
+                reject(error);
+            }
+        });
+
+        // Stop scanning after a certain timeout
+        setTimeout(() => {
+            noble.stopScanning();
+        }, 10000); // for example, 10 seconds
+    });
+}
+
+
 gpsdClient.on('close', () => {
     console.log('Connection to gpsd closed');
     gpsdConnected = false;
@@ -142,6 +181,12 @@ async function sendHeartbeat() {
     const screenshotBase64 = await captureScreenshot();
     const systemMetrics = await getOptionalSystemMetrics();
     const wifiNetworks = config.wifiScanEnabled ? await scanWifi() : [];
+    let bluetoothDevices = [];
+
+    // Include Bluetooth scan results if enabled
+    if (config.bluetoothScanEnabled) {
+        bluetoothDevices = await scanBluetooth(); // Make sure this matches the duration in the config
+    }
 
     const unitID = config.uniqueID;
 
@@ -151,7 +196,8 @@ async function sendHeartbeat() {
         gpsdConnected: gpsdConnected,
         screenshot: screenshotBase64,
         systemMetrics,
-        wifiNetworks // Include WiFi scan results
+        wifiNetworks, // Include WiFi scan results
+        bluetoothDevices // Include Bluetooth scan results
     };
 
     mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
@@ -160,6 +206,7 @@ async function sendHeartbeat() {
         }
     });
 }
+
 
 mqttClient.on('connect', () => {
     console.log('Connected to MQTT server');

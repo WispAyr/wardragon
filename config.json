@@ -7,5 +7,7 @@
   "captureScreenshots": true,
   "transferSystemMetrics": true,
   "wifiScanInterval": 60000, 
-  "wifiScanEnabled": true
+  "wifiScanEnabled": true,
+  "bluetoothScanEnabled": true,
+  "bluetoothScanDuration": 10000
 }

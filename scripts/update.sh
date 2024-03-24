@@ -12,6 +12,8 @@ git pull
 echo "Repository reset and cleaned."
 
 npm install node-wifi
+npm install @abandonware/noble
+
 
 # Step 2: Installing Node.js dependencies
 echo "Installing Node.js dependencies..."
