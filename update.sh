@@ -21,7 +21,6 @@ sudo npm install express http socket.io fs path mqtt os os-utils node-disk-info 
 sudo npm install express mqtt screenshot-desktop sharp node-disk-info
 sudo npm install --include=optional sharp
 sudo npm install node-wifi
-sudo npm install @abandonware/noble
 
 sudo npm install
 echo "Dependencies installed."
@@ -42,6 +41,5 @@ if [[ $proceed == "y" ]]; then
 else
     echo "Skipping additional steps."
 fi
-bluetoothctl power on
-sudo setcap cap_net_raw+eip $(eval readlink -f `which node`)
+
 echo "WARDRAGON UPDATE APPLICATION script completed."
