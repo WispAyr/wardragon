@@ -1,7 +1,7 @@
 {
   "mqttServer": "mqtt://172.22.137.90",
   "heartbeatInterval": 1000,
-  "serverPort": 4000,
+  "serverPort": 1234,
   "uniqueID": "123456789",
   "mqttTopic": "wardragon/heartbeat",
   "captureScreenshots": true,
