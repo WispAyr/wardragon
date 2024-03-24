@@ -67,13 +67,18 @@ gpsdClient.on('data', async (data) => {
     }
 });
 
-const noble = require('@abandonware/noble');
+// Increase the maximum number of listeners for the Noble instance
+noble.setMaxListeners(20); // Adjust the number based on your needs
+
+// Singleton listener for Bluetooth scanning events
+noble.on('scanStart', () => console.log('Bluetooth scanning started'));
+noble.on('scanStop', () => console.log('Bluetooth scanning stopped'));
 
 async function scanBluetooth() {
     return new Promise((resolve, reject) => {
         let devices = [];
 
-        noble.on('discover', (peripheral) => {
+        const handleDiscover = (peripheral) => {
             devices.push({
                 id: peripheral.id,
                 address: peripheral.address,
@@ -81,27 +86,24 @@ async function scanBluetooth() {
                 txPowerLevel: peripheral.advertisement.txPowerLevel,
                 rssi: peripheral.rssi
             });
-        });
+        };
 
-        noble.on('scanStart', () => {
-            console.log('Bluetooth scanning started');
-        });
-
-        noble.on('scanStop', () => {
-            console.log('Bluetooth scanning stopped');
-            resolve(devices);
-        });
+        // Add discover listener
+        noble.on('discover', handleDiscover);
 
         noble.startScanning([], true, (error) => {
             if (error) {
+                noble.removeListener('discover', handleDiscover);
                 reject(error);
             }
         });
 
-        // Stop scanning after a certain timeout
+        // Stop scanning after a predetermined duration and remove the discover listener
         setTimeout(() => {
             noble.stopScanning();
-        }, 10000); // for example, 10 seconds
+            noble.removeListener('discover', handleDiscover);
+            resolve(devices);
+        }, config.bluetoothScanDuration || 10000); // Default to 10 seconds if not specified
     });
 }
 
@@ -189,6 +191,10 @@ async function sendHeartbeat() {
     }
 
     const unitID = config.uniqueID;
+    let bluetoothDevices = [];
+    if (config.bluetoothScanEnabled) {
+        bluetoothDevices = await scanBluetooth(); // Ensure Bluetooth scanning is properly managed
+    }
 
     const messagePayload = {
         unitID: unitID,
