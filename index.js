@@ -24,6 +24,11 @@ try {
     process.exit(1);
 }
 
+const port = config.serverPort || 1234;
+server.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});
+
 const mqttClient = mqtt.connect(config.mqttServer, {
     clientId: config.uniqueID
 });
@@ -227,7 +232,3 @@ process.on('unhandledRejection', (reason, promise) => {
 console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-const port = config.serverPort;
-server.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-});
