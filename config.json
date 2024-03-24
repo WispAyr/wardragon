@@ -6,6 +6,6 @@
   "mqttTopic": "wardragon/heartbeat",
   "captureScreenshots": true,
   "transferSystemMetrics": true,
-  "wifiScanInterval": 60000, // Interval for WiFi scanning in milliseconds
-  "wifiScanEnabled": true // Whether WiFi scanning is enabled or not
+  "wifiScanInterval": 60000, 
+  "wifiScanEnabled": true
 }
