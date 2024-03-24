@@ -9,8 +9,6 @@ const sharp = require('sharp');
 const os = require('os');
 const { getDiskInfoSync } = require('node-disk-info');
 const actions = require('./actions');
-const noble = require('noble');
-
 
 const app = express();
 const server = http.createServer(app);
@@ -36,7 +34,7 @@ const wifi = require('node-wifi');
 // Absolutely necessary even to set interface to null
 wifi.init({
     iface: null // network interface, choose a random wifi interface if set to null
-  });
+});
   
 
 const wifiScanInterval = config.wifiScanInterval || 60000;
@@ -68,47 +66,6 @@ gpsdClient.on('data', async (data) => {
         }
     }
 });
-
-// Increase the maximum number of listeners for the Noble instance
-noble.setMaxListeners(20); // Adjust the number based on your needs
-
-// Singleton listener for Bluetooth scanning events
-noble.on('scanStart', () => console.log('Bluetooth scanning started'));
-noble.on('scanStop', () => console.log('Bluetooth scanning stopped'));
-
-async function scanBluetooth() {
-    return new Promise((resolve, reject) => {
-        let devices = [];
-
-        const handleDiscover = (peripheral) => {
-            devices.push({
-                id: peripheral.id,
-                address: peripheral.address,
-                localName: peripheral.advertisement.localName,
-                txPowerLevel: peripheral.advertisement.txPowerLevel,
-                rssi: peripheral.rssi
-            });
-        };
-
-        // Add discover listener
-        noble.on('discover', handleDiscover);
-
-        noble.startScanning([], true, (error) => {
-            if (error) {
-                noble.removeListener('discover', handleDiscover);
-                reject(error);
-            }
-        });
-
-        // Stop scanning after a predetermined duration and remove the discover listener
-        setTimeout(() => {
-            noble.stopScanning();
-            noble.removeListener('discover', handleDiscover);
-            resolve(devices);
-        }, config.bluetoothScanDuration || 10000); // Default to 10 seconds if not specified
-    });
-}
-
 
 gpsdClient.on('close', () => {
     console.log('Connection to gpsd closed');
@@ -185,26 +142,16 @@ async function sendHeartbeat() {
     const screenshotBase64 = await captureScreenshot();
     const systemMetrics = await getOptionalSystemMetrics();
     const wifiNetworks = config.wifiScanEnabled ? await scanWifi() : [];
-    let bluetoothDevices = [];
-
-    // Include Bluetooth scan results if enabled
-    if (config.bluetoothScanEnabled) {
-        bluetoothDevices = await scanBluetooth(); // Make sure this matches the duration in the config
-    }
-
+    
     const unitID = config.uniqueID;
-    if (config.bluetoothScanEnabled) {
-        bluetoothDevices = await scanBluetooth(); // Ensure Bluetooth scanning is properly managed
-    }
-
+    
     const messagePayload = {
         unitID: unitID,
         gpsData: gpsData,
         gpsdConnected: gpsdConnected,
         screenshot: screenshotBase64,
         systemMetrics,
-        wifiNetworks, // Include WiFi scan results
-        bluetoothDevices // Include Bluetooth scan results
+        wifiNetworks // Include WiFi scan results
     };
 
     mqttClient.publish(config.mqttTopic, JSON.stringify(messagePayload), {}, (error) => {
@@ -221,66 +168,66 @@ mqttClient.on('connect', () => {
         if (!err) {
             console.log('Subscribed to ACTION topic');
         } else {
-            console.error('Failed to subscribe to ACTION topic:', err);
+        console.error('Failed to subscribe to ACTION topic:', err);
         }
-    });
-});
-
-mqttClient.on('error', (error) => {
-    console.error('MQTT connection error:', error);
-});
-
-mqttClient.on('message', function(topic, message) {
-    if (topic === 'ACTION') {
+        });
+        });
+        
+        mqttClient.on('error', (error) => {
+        console.error('MQTT connection error:', error);
+        });
+        
+        mqttClient.on('message', function(topic, message) {
+        if (topic === 'ACTION') {
         handleActionMessage(message.toString());
-    }
-});
-
-const heartbeatInterval = config.heartbeatInterval || 300000;
-setInterval(sendHeartbeat, heartbeatInterval);
-
-function handleActionMessage(message) {
-    let actionMessage;
-    try {
+        }
+        });
+        
+        const heartbeatInterval = config.heartbeatInterval || 300000;
+        setInterval(sendHeartbeat, heartbeatInterval);
+        
+        function handleActionMessage(message) {
+        let actionMessage;
+        try {
         actionMessage = JSON.parse(message);
-    } catch (error) {
+        } catch (error) {
         console.error('Error parsing ACTION message:', error);
         return;
-    }
-    
-    const { action, taskId } = actionMessage;
-    const responseTopic = `ACTION_RESPONSE/${taskId}`;
+        }
+        const { action, taskId } = actionMessage;
+const responseTopic = `ACTION_RESPONSE/${taskId}`;
 
-    if (actions[action]) {
-        actions[action](taskId, (error, result) => {
-            if (error) {
-                mqttClient.publish(responseTopic, JSON.stringify({ error: error.message, taskId }), {}, (err) => {
-                    if (err) {
-                        console.error('Error sending action failure response:', err);
-                    }
-                });
-            } else {
-                mqttClient.publish(responseTopic, JSON.stringify({ result, taskId }), {}, (err) => {
-                    if (err) {
-                        console.error('Error sending action success response:', err);
-                    }
-                });
-            }
-        });
-    } else {
-        console.error(`Received unknown action: ${action}`);
-    }
+if (actions[action]) {
+    actions[action](taskId, (error, result) => {
+        if (error) {
+            mqttClient.publish(responseTopic, JSON.stringify({ error: error.message, taskId }), {}, (err) => {
+                if (err) {
+                    console.error('Error sending action failure response:', err);
+                }
+            });
+        } else {
+            mqttClient.publish(responseTopic, JSON.stringify({ result, taskId }), {}, (err) => {
+                if (err) {
+                    console.error('Error sending action success response:', err);
+                }
+            });
+        }
+    });
+} else {
+    console.error(`Received unknown action: ${action}`);
+}
+
 }
 
 process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
+console.error('Uncaught Exception:', error);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 const port = process.env.PORT || config.ServerPort;
 server.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+console.log(Server running at http://localhost:${port});
 });
