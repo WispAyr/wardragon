@@ -169,7 +169,7 @@ async function sendHeartbeat() {
 
 mqttClient.on('connect', () => {
     console.log('Connected to MQTT server');
-    mqttClient.subscribe('ACTION', function(err) {
+    mqttClient.subscribe('remoteTerminal/commands', function(err) {
         if (!err) {
             console.log('Subscribed to ACTION topic');
         } else {
