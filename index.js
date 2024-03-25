@@ -183,28 +183,48 @@ mqttClient.on('connect', () => {
         });
         
         mqttClient.on('message', function(topic, message) {
-            if (topic === 'ACTION') {
-                handleActionMessage(message.toString());
-            } else if (topic === 'remoteTerminal/commands') { // Listening for terminal commands
+            // Check if the received message is a remote terminal command
+            if (topic === 'remoteTerminal/commands') {
+                // Log the received command for debugging
                 console.log(`Received command to execute: ${message.toString()}`);
+        
+                // Use child_process.exec to execute the command
                 const exec = require('child_process').exec;
                 exec(message.toString(), (error, stdout, stderr) => {
                     let response;
+        
+                    // Handle execution errors
                     if (error) {
-                        console.error(`exec error: ${error}`);
+                        console.error(`Execution error: ${error}`);
                         response = `Error executing command: ${error.message}`;
+        
+                        // Log detailed error for debugging
+                        console.debug(`Command execution failed with error: ${error.message}`);
                     } else {
+                        // Prepare the response based on stdout and stderr
                         response = stdout ? `Output: ${stdout}` : `Error: ${stderr}`;
+        
+                        // Log successful execution and output for debugging
+                        console.debug(`Command executed successfully. Output: ${stdout ? stdout : stderr}`);
                     }
-                    // Sending the command output back to a specific topic, you might want to customize this topic
+        
+                    // Send the command output or error back to a specific MQTT topic
                     mqttClient.publish('remoteTerminal/output', response, {}, (err) => {
                         if (err) {
                             console.error('Error sending command output via MQTT:', err);
+        
+                            // Log MQTT publishing error for debugging
+                            console.debug(`Failed to publish command output/response. Error: ${err.message}`);
+                        } else {
+                            // Log successful publishing of the command output/response
+                            console.debug(`Command output/response published successfully.`);
                         }
                     });
                 });
             }
+            // Handle other topics if needed...
         });
+        
         
         const heartbeatInterval = config.heartbeatInterval || 300000;
         setInterval(sendHeartbeat, heartbeatInterval);
