@@ -183,9 +183,27 @@ mqttClient.on('connect', () => {
         });
         
         mqttClient.on('message', function(topic, message) {
-        if (topic === 'ACTION') {
-        handleActionMessage(message.toString());
-        }
+            if (topic === 'ACTION') {
+                handleActionMessage(message.toString());
+            } else if (topic === 'remoteTerminal/commands') { // Listening for terminal commands
+                console.log(`Received command to execute: ${message.toString()}`);
+                const exec = require('child_process').exec;
+                exec(message.toString(), (error, stdout, stderr) => {
+                    let response;
+                    if (error) {
+                        console.error(`exec error: ${error}`);
+                        response = `Error executing command: ${error.message}`;
+                    } else {
+                        response = stdout ? `Output: ${stdout}` : `Error: ${stderr}`;
+                    }
+                    // Sending the command output back to a specific topic, you might want to customize this topic
+                    mqttClient.publish('remoteTerminal/output', response, {}, (err) => {
+                        if (err) {
+                            console.error('Error sending command output via MQTT:', err);
+                        }
+                    });
+                });
+            }
         });
         
         const heartbeatInterval = config.heartbeatInterval || 300000;
